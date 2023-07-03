@@ -6,7 +6,7 @@
 
 Ranking is a ubiquitous method for focusing the attention of human evaluators on a manageable subset of options. Its use ranges from surfacing potentially relevant products on an e-commerce site to prioritizing college applications for human review. While ranking can make human evaluation far more effective by focusing attention on the most promising options, we argue that it can introduce unfairness if the epistemic uncertainty differs between groups of options. Unfortunately, such disparity in epistemic uncertainty appears widespread, since the relevance estimates for minority groups tend to have higher uncertainty due to a lack of data or appropriate features. To overcome this fairness issue, we propose Equal-Opportunity Ranking (EOR) as a new fairness criterion for ranking that provably corrects for the disparity in epistemic uncertainty between groups. Furthermore, we present a practical algorithm for computing EOR rankings in time $O(n \log(n))$ and prove a close approximation guarantee to the intractable integer programming solution. We evaluated the efficacy of our algorithm with empirical experiments on synthetic data and a real-world case study of Amazon search queries.
 
-<img src="posterior.pdf" alt="Disparate Uncertainty between two groups">
+![Disparate Uncertainty between two groups](./posterior.pdf)
 
 ## Acknowledgements
 
