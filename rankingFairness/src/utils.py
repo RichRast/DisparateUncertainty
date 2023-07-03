@@ -98,8 +98,9 @@ def plotDrichletDist(alphas_majority=[np.array([1,10,2])], alphas_minority=[np.a
     plt.show()
 
 def plotBetaDist(alphas_majority=[(90,20), (95,15), (100,10),(10,100)], 
-                alphas_minority=[(5,3), (3,3), (3,4),(5,4)], size=1000, loc='upper center', offset=0.05):
-    assert len(alphas_majority)==len(alphas_minority)
+                alphas_minority=[(5,3), (3,3), (3,4),(5,4)], size=1000,
+                loc='upper center', offset=0.05, saveFig='posterior.pdf'):
+    # assert len(alphas_majority)==len(alphas_minority)
     fig,ax = plt.subplots(figsize=(7,3))
     for alpha,beta in alphas_majority:
         beta_samples=Beta(alpha,beta).sample(num_samples=size)
@@ -110,7 +111,8 @@ def plotBetaDist(alphas_majority=[(90,20), (95,15), (100,10),(10,100)],
                      fill=True,
                      ax = ax)
         means_majority = Bernoulli(Beta(alpha,beta).getMean()).getMean()
-        ax.vlines(means_majority, 0, 1.4,  linewidth=4.0, zorder=3, color='teal')
+        # ax.vlines(means_majority, 0, 1.4,  linewidth=4.0, zorder=3, color='teal')
+        ax.vlines(means_majority, 0, 5,  linewidth=0.5, zorder=3, color='teal')
     
     for alpha,beta in alphas_minority:
         beta_samples=Beta(alpha,beta).sample(num_samples=size)
@@ -121,7 +123,8 @@ def plotBetaDist(alphas_majority=[(90,20), (95,15), (100,10),(10,100)],
                      fill=True,
                      ax = ax)
         means_minority = Bernoulli(Beta(alpha,beta).getMean()).getMean()
-        ax.vlines(means_minority, 0, 1.4,  linewidth=4.0, zorder=3, color='lightpink')
+        # ax.vlines(means_minority, 0, 1.4,  linewidth=4.0, zorder=3, color='lightpink')
+        ax.vlines(means_minority, 0, 5,  linewidth=0.5, zorder=3, color='black')
 
     
     ax.set_xlabel(r'$\bf{\theta_i}$', fontsize=20)
@@ -143,7 +146,8 @@ def plotBetaDist(alphas_majority=[(90,20), (95,15), (100,10),(10,100)],
     plt.tick_params(top = False, bottom = False)
     ax.set_ylabel(r'Posterior $\bf{\mathbb{P}(\theta_i|\mathbb{D})}$', fontsize=17)
     plt.tight_layout()
-    plt.savefig(f"{osp.join('/share/thorsten/rr568/CostOptimal_FairRankings/plots','posterior.pdf')}")
+    if saveFig is not None:
+        plt.savefig(f"{osp.join('/share/thorsten/rr568/CostOptimal_FairRankings/plots', str(saveFig))}")
     plt.show()
     plt.close()
 

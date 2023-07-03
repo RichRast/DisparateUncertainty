@@ -148,6 +148,6 @@ class UtilityCost():
             n_minority_ranking = sum([d.getMean() for d in np.array(dist[1])[ids_minority_ranking]]) if len(ids_minority_ranking)>0 else 0
             EOR.append((n_majority_ranking/self.n_majority) - (n_minority_ranking/self.n_minority))
         
-        
+        assert len(EOR)==len(self.ranking)
         return sum([np.abs(i) for i in EOR])/len(EOR), sum(EOR)/len(EOR), self.delta_max
     

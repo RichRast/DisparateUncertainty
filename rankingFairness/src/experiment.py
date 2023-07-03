@@ -1,7 +1,7 @@
 import numpy as np
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
-from rankingFairness.src.distributions import Bandit, Bernoulli
+from rankingFairness.src.distributions import Bernoulli
 from rankingFairness.src.tradeoff import UtilityCost
 from rankingFairness.src.utils import getGroupNames
 from rankingFairness.src.rankings import Uniform_Ranker, TS_RankerII, EO_RankerII, DP_Ranker
@@ -197,18 +197,18 @@ class simpleOffline(GeneralExperiment):
         minority_lines= Line2D([], [], color='black', linestyle='dotted', linewidth=3, label=r'Minority Cost')
         total_lines = Line2D([], [], color='black', linestyle='solid', linewidth=3, label=r'Total Cost')
         handles.extend([majority_lines, minority_lines, total_lines])
-        legend = plt.legend(handles=handles, fontsize=15, loc='upper center', 
-        bbox_to_anchor=(0.5, 1.35),
-        ncol=4)
+        # legend = plt.legend(handles=handles, fontsize=15, loc='upper center', 
+        # bbox_to_anchor=(0.5, 1.35),
+        # ncol=4)
         plt.xlim(1-self.offset, self.num_docs+self.offset)
         plt.tight_layout()
         if self.saveFig is not None:
             plt.savefig(f"{osp.join(self.saveFig,'EO.pdf')}", bbox_inches='tight')
-            bbox=legend.get_window_extent()
-            expand=[-5,-5,5,5]
-            bbox = bbox.from_extents(*(bbox.extents + np.array(expand)))
-            bbox = bbox.transformed(fig.dpi_scale_trans.inverted())
-            plt.savefig(f"{osp.join(self.saveFig,'legend.pdf')}", bbox_inches=bbox)
+            # bbox=legend.get_window_extent()
+            # expand=[-5,-5,5,5]
+            # bbox = bbox.from_extents(*(bbox.extents + np.array(expand)))
+            # bbox = bbox.transformed(fig.dpi_scale_trans.inverted())
+            # plt.savefig(f"{osp.join(self.saveFig,'legend.pdf')}", bbox_inches=bbox)
         plt.show()
         plt.close()
 

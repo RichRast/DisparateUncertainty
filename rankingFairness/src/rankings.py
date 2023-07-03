@@ -275,9 +275,7 @@ class EO_RankerII(Ranker):
 
             self.ranking.append(selected_arm)
             j+=1
-            EOR_monitor.append(self.getEOR(self.ranking)[0])
 
-        return EOR_monitor
 
     def getEOR(self, ranking):
         # add unit test for EOR calculation
