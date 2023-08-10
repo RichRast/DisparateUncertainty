@@ -39,53 +39,6 @@ class Beta():
         self.alpha +=s
         self.beta +=f
 
-class Rewards():
-    def __init__(self, reward_dist, prior_dist) -> None:
-        super().__init__()
-        """
-        Reward Distribution is the true merit distribution
-        Prior Distribution is the estimated merit distrbution
-        """
-        self.reward_dist = reward_dist
-        self.prior_dist = prior_dist
-
-    def getRewards(self, num_samples):
-        zeroOneRewards = self.reward_dist.sample(num_samples)
-        return sum(zeroOneRewards), len(zeroOneRewards)-sum(zeroOneRewards)
-
-    def getPosterior(self, s, f):
-        self.prior_dist.update(s, f)
-
-class BetaBernoulli():
-    def __init__(self, dist) ->None:
-        super().__init__()
-        """
-        Class for Beta Bernoulli Conjugate Model
-        """
-        self.dist=dist
-
-    def sample(self):
-        probs_all=[]
-        for i in range(len(self.dist)):  
-            probs_all.extend([d.getMean() for d in self.dist[i]])
-        return np.random.binomial(1, probs_all)
-    
-
-class DrichletMultinomial():
-    def __init__(self, dist) ->None:
-        super().__init__()
-        """
-        Class for Drichlet Multinomial Conjugate Model
-        """
-        self.dist=dist
-
-    def sample(self):
-        probs_all = [d for d in self.dist[0]]
-        probs_all.extend([d for d in self.dist[1]])
-        merits=[p.sample(1) for p in probs_all]
-        return merits
-
-
 class Multinomial():
     def __init__(self, pvals) -> None:
         super().__init__()

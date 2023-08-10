@@ -46,11 +46,21 @@ class simpleOffline(GeneralExperiment):
         self.setGroups()
         self.predfined_ls=predfined_ls
         # [[majority dist], [minority dist]]
-        self.colorMap=['tab:red', 'tab:blue', 'tab:orange', 'tab:grey', 'tab:green', 'tab:pink']
-        self.markers=[">",  "<"]
+        self.colorMap={'PRP':'tab:blue', 
+                        'TS':'tab:orange', 
+                        'DP':'tab:grey',
+                        'Uniform':'tab:green', 
+                        'EOR':'tab:red',
+                        'others':'tab:olive',
+                        'RR':'tab:brown',
+                        'DC':'tab:pink'}
+        self.markers=['s', 'X', 'o', 'P']
         self.distType = distType
         self.delta_max=None
-        self.merits=None
+        self.merits=merits
+        self.n_labels=False
+        if self.merits is not None:
+            self.n_labels=True
         self.plot=plot
         self.offset=offset
         self.verbose=verbose
@@ -72,45 +82,51 @@ class simpleOffline(GeneralExperiment):
         return meritObj.sample()
 
     def posteriorPredictiveAlg(self, simulations, rankingAlgos):
-        if self.merits is None:    
-            self.merits = np.full((simulations, self.num_docs), np.inf)
+        # if self.merits is None:    
+        #     self.merits = np.full((simulations, self.num_docs), np.inf)
+        #     self.n_labels=True  
+        #     for e in tqdm(range(simulations)):
+        #         self.merits[e,:] = self.sampleMerits()
         
-            for e in tqdm(range(simulations)):
-                self.merits[e,:] = self.sampleMerits()
-        
-
+        a_EOR=None
         for a, rankingAlg in enumerate(rankingAlgos):
             if (self.switch_start) and (rankingAlg in [EO_RankerII, DP_Ranker]):
+                ranking_simulations = np.ones((simulations, self.num_docs), dtype=int)
                 for e in tqdm(range(simulations)):
                     ranker = rankingAlg(self.predfined_ls, distType=self.distType, switch_start=self.switch_start)
                     ranker.rank(self.num_docs)
-                    self.ranking[a, e]=ranker.ranking
+                    ranking_simulations[e]=ranker.ranking
+                    # self.ranking[a, e]=ranker.ranking
+                self.ranking[a]=ranking_simulations
             else:
                 ranker = rankingAlg(self.predfined_ls, distType=self.distType)
                 if isinstance(ranker, Uniform_Ranker):
+                    ranking_simulations = np.ones((simulations, self.num_docs), dtype=int)
                     for e in tqdm(range(simulations)):
                         ranker.rank(self.num_docs)
-                        self.ranking[a, e]=ranker.ranking
+                        ranking_simulations[e]=ranker.ranking
+                    self.ranking[a]=ranking_simulations
                 elif isinstance(ranker, TS_RankerII):
                     ranker.rank(self.num_docs, simulations)
                     self.ranking[a]=ranker.ranking
                 else:
                     ranker.rank(self.num_docs)
-                    if self.merits is None:  
-                        self.ranking[a]=np.tile(np.array(ranker.ranking)[None,:],(simulations,1))
-                    else:
-                        self.ranking[a]=np.array(ranker.ranking)[None,:]
-        
+                    self.ranking[a]=np.array(ranker.ranking)[None,:]
+                    if isinstance(ranker, EO_RankerII):
+                        a_EOR=a
+                        self.delta_max=ranker.delta_max
         for top_k in range(self.num_docs):    
             for a, rankingAlg in enumerate(rankingAlgos):
-                utilCostObj= UtilityCost(self.ranking[a], self.num_docs, top_k+1, simulations)
-                self.dcgUtil[a, top_k] = utilCostObj.getUtil(self.merits)
-                utilCostObj.getCostArms(self.start_minority_idx, self.merits, self.predfined_ls)
+                utilCostObj = UtilityCost(self.ranking[a], self.num_docs, top_k+1, simulations, self.start_minority_idx, n_labels=self.n_labels)
+                self.dcgUtil[a, top_k] = utilCostObj.getUtil(self.predfined_ls, self.merits)
+                utilCostObj.getCostArms(self.predfined_ls, self.merits)
                 self.cost_majority[a, top_k] =utilCostObj.cost_majority
-                self.cost_minority[a, top_k]=utilCostObj.cost_minority
-                self.total_cost[a, top_k]=utilCostObj.cost
-                self.EO_constraint[a, top_k]=utilCostObj.EOR_constraint(self.start_minority_idx, self.predfined_ls)[1]
-        self.delta_max=utilCostObj.EOR_constraint(self.start_minority_idx, self.predfined_ls)[2]
+                self.cost_minority[a, top_k] = utilCostObj.cost_minority
+                self.total_cost[a, top_k] = utilCostObj.cost
+                self.EO_constraint[a, top_k] = utilCostObj.EOR_constraint(self.predfined_ls)[1]
+        self.delta_max = utilCostObj.EOR_constraint(self.predfined_ls)[2]
+        if a_EOR is not None and (self.merits is None):
+            assert np.any(self.EO_constraint[a_EOR, :]<=self.delta_max), f"{np.max(self.EO_constraint[a_EOR, :])}, delta_max: {self.delta_max}"
         if self.plot:
             self.visualize_Cost(rankingAlgos)
             self.visualize_EO(rankingAlgos)
@@ -121,7 +137,7 @@ class simpleOffline(GeneralExperiment):
         plt.rc('font', family='serif')
         fig, ax = plt.subplots(figsize=(5,5))
         for a, rankingAlg in enumerate(rankingAlgos):
-            ax.plot(np.arange(self.num_docs)+1, self.dcgUtil[a, :], label=f"{rankingAlg.name()}", c=self.colorMap[a], marker = '.',linewidth=1, markersize=1)
+            ax.plot(np.arange(self.num_docs)+1, self.dcgUtil[a, :], label=f"{rankingAlg.name()}", c=self.colorMap[rankingAlg.name()], marker = '.',linewidth=1, markersize=1)
 
         # plt.grid()   
         plt.xlabel("Length of Ranking (k)", fontsize=20)
@@ -141,9 +157,9 @@ class simpleOffline(GeneralExperiment):
         fig, ax = plt.subplots(figsize=(5,5))
         plt.rc('font', family='serif')
         for a, rankingAlg in enumerate(rankingAlgos):
-            ax.plot(np.arange(self.num_docs)+1, self.cost_majority[a, :], linestyle='dashed', c=self.colorMap[a],linewidth=3)
-            ax.plot(np.arange(self.num_docs)+1, self.cost_minority[a, :],  linestyle='dotted', c=self.colorMap[a],linewidth=3)
-            ax.plot(np.arange(self.num_docs)+1, self.total_cost[a, :], linestyle='solid', alpha=0.6, c=self.colorMap[a],linewidth=3)
+            ax.plot(np.arange(self.num_docs)+1, self.cost_majority[a, :], linestyle='dashed', c=self.colorMap[rankingAlg.name()],linewidth=3)
+            ax.plot(np.arange(self.num_docs)+1, self.cost_minority[a, :],  linestyle='dotted', c=self.colorMap[rankingAlg.name()],linewidth=3)
+            ax.plot(np.arange(self.num_docs)+1, self.total_cost[a, :], linestyle='solid', alpha=0.6, c=self.colorMap[rankingAlg.name()],linewidth=3)
             
         handles, labels = ax.get_legend_handles_labels()
         majority_lines= Line2D([], [], color='black', linestyle='dashed', label=r'Majority Cost')
@@ -154,8 +170,8 @@ class simpleOffline(GeneralExperiment):
         #     tmp = Line2D([], [], color=self.colorMap[a], label=f"{rankingAlg.name()}")
         #     handles.extend(tmp)
         
-        plt.xlabel("Length of Ranking (k)", fontsize=15)
-        plt.ylabel(f"Costs ", fontsize=15)
+        plt.xlabel("Length of Ranking (k)", fontsize=20)
+        plt.ylabel(f"Costs ", fontsize=20)
         pos = ax.get_position()
         ax.set_position([pos.x0, pos.y0, pos.width, pos.height * 0.7])
         # plt.legend(handles=handles, fontsize=12, loc='upper center', 
@@ -174,24 +190,25 @@ class simpleOffline(GeneralExperiment):
         plt.rc('font', family='serif')
         fig, ax = plt.subplots(figsize=(5,5))
         for a, rankingAlg in enumerate(rankingAlgos):
-            ax.plot(np.arange(self.num_docs)+1, self.EO_constraint[a, :], label=str(rankingAlg.name()), c=self.colorMap[a], marker = '.',linewidth=3, markersize=1)
-        pos = ax.get_position()
-        # ax.set_position([pos.x0, pos.y0, pos.width, pos.height * 0.7])
-        # plt.grid()
-        plt.ylabel(r'$\bf{\delta_k = \frac{n(A|\sigma_k) }{n_A}- \frac{n(B|\sigma_k)}{n_B}}$', fontsize=20)
-        plt.xlabel("Length of Ranking (k)", fontsize=15)
+            ax.plot(np.arange(self.num_docs)+1, self.EO_constraint[a, :], label=str(rankingAlg.name()), c=self.colorMap[rankingAlg.name()])
+        ax.plot(np.arange(self.num_docs)+1, self.delta_max, c='black', linestyle='dashed')
+        ax.plot(np.arange(self.num_docs)+1, -self.delta_max, c='black', linestyle='dashed')
+        plt.ylabel(r'$\bf{\delta(\sigma_k) = \frac{n(A|\sigma_k) }{n(A)}- \frac{n(B|\sigma_k)}{n(B)}}$', fontsize=20)
+        plt.xlabel("Length of Ranking (k)", fontsize=20)
         
         if self.delta_max is not None:
-            plt.hlines(y=self.delta_max, xmin=1,xmax=self.num_docs, color='black', linestyle='dashed')
-            plt.hlines(y=-self.delta_max, xmin=1,xmax=self.num_docs, color='black', linestyle='dashed')
-            plt.text(self.num_docs/2, self.delta_max+self.offset, r'$\delta_{max}$', c='black', fontsize=20)
-            plt.text(self.num_docs/2, -self.delta_max-self.offset, r'$-\delta_{max}$', c='black', fontsize=20)
+        #     plt.hlines(y=self.delta_max, xmin=1,xmax=self.num_docs, color='black', linestyle='dashed')
+        #     plt.hlines(y=-self.delta_max, xmin=1,xmax=self.num_docs, color='black', linestyle='dashed')
+            delta_max=np.max(self.delta_max)
+            plt.text(self.num_docs/2, delta_max+self.offset, r'$\delta_{max}$', c='black', fontsize=20)
+            plt.text(self.num_docs/2, -delta_max-self.offset, r'$-\delta_{max}$', c='black', fontsize=20)
         
         n_majority=sum([p.getMean() for p in self.predfined_ls[0]])
         n_minority=sum([p.getMean() for p in self.predfined_ls[1]])
         if self.verbose:
             relevance_handle = ax.plot([], [], ' ', label=f'$n_A={{{n_majority}}}, n_B={{{n_minority}}}$')
             size_handle = ax.plot([], [], ' ', label=f'$\vert A \vert={{{self.start_minority_idx}}}, \vert B \vert={{{self.num_docs-self.start_minority_idx}}}$')
+            handles.extend([relevance_handle, size_handle])
         handles, labels = ax.get_legend_handles_labels()
         majority_lines= Line2D([], [], color='black', linestyle='dashed', linewidth=3, label=r'Majority Cost')
         minority_lines= Line2D([], [], color='black', linestyle='dotted', linewidth=3, label=r'Minority Cost')
@@ -199,7 +216,7 @@ class simpleOffline(GeneralExperiment):
         handles.extend([majority_lines, minority_lines, total_lines])
         # legend = plt.legend(handles=handles, fontsize=15, loc='upper center', 
         # bbox_to_anchor=(0.5, 1.35),
-        # ncol=4)
+        # ncol=8)
         plt.xlim(1-self.offset, self.num_docs+self.offset)
         plt.tight_layout()
         if self.saveFig is not None:
@@ -231,7 +248,6 @@ class simpleOffline(GeneralExperiment):
     def experiment(self, rankingAlgos, simulations, figsize=(20,5)):
         """
         Args:
-            timesteps: (int) how many steps for the algo to learn the bandit
             simulations: (int) number of epochs
         """
         names=[]
@@ -240,11 +256,8 @@ class simpleOffline(GeneralExperiment):
         self.cost_minority = np.zeros((len(rankingAlgos), self.num_docs))
         self.total_cost = np.zeros((len(rankingAlgos), self.num_docs))
         self.EO_constraint = np.zeros((len(rankingAlgos), self.num_docs))
-        if self.merits is None: 
-            self.ranking = np.ones((len(rankingAlgos), simulations, self.num_docs), dtype=int)
-        else:
-            self.ranking = np.ones((len(rankingAlgos), self.num_docs), dtype=int)
-
+        self.ranking={}
+        self.delta_max = np.zeros((self.num_docs))
         plt.rcParams["figure.figsize"] = figsize
         self.posteriorPredictiveAlg(simulations, rankingAlgos)
 
