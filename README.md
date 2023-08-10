@@ -27,9 +27,11 @@ In the scripts folder, customize the script ```init_env.sh``` for your environme
 
 
 ## Examples
-Notebook titled "Duality Thm1" for plotting the theorem 6.1 example of cost optimality gap
+Notebook  "Duality Thm1" for plotting the theorem 6.1 example of cost optimality gap.
 
-Notebook titled "FairRanking_DisparateUncertainty" can be used to run synthetic examples for given $G$ groups and specific expected relevance estimates $P(r_i|D)$
+Notebook  "Markup_Amazon_Analysis" for analysis of Amazon search queries experiment.
+
+Notebook  "FairRanking_DisparateUncertainty" can be used to run synthetic examples for given $G$ groups and specific expected relevance estimates $P(r_i|D)$.
 
 ## Citation
 <!-- If you find this repo useful for your research, please consider citing our paper:
