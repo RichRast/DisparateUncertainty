@@ -114,7 +114,7 @@ class simpleOffline(GeneralExperiment):
                     self.ranking[a]=np.array(ranker.ranking)[None,:]
                     if isinstance(ranker, EO_RankerII):
                         a_EOR=a
-                        self.delta_max=ranker.delta_max
+                        
         for top_k in range(self.num_docs):    
             for a, rankingAlg in enumerate(rankingAlgos):
                 utilCostObj = UtilityCost(self.ranking[a], self.num_docs, top_k+1, simulations, self.start_minority_idx, n_labels=self.n_labels)
@@ -191,14 +191,13 @@ class simpleOffline(GeneralExperiment):
         fig, ax = plt.subplots(figsize=(5,5))
         for a, rankingAlg in enumerate(rankingAlgos):
             ax.plot(np.arange(self.num_docs)+1, self.EO_constraint[a, :], label=str(rankingAlg.name()), c=self.colorMap[rankingAlg.name()])
-        ax.plot(np.arange(self.num_docs)+1, self.delta_max, c='black', linestyle='dashed')
-        ax.plot(np.arange(self.num_docs)+1, -self.delta_max, c='black', linestyle='dashed')
+
         plt.ylabel(r'$\bf{\delta(\sigma_k) = \frac{n(A|\sigma_k) }{n(A)}- \frac{n(B|\sigma_k)}{n(B)}}$', fontsize=20)
         plt.xlabel("Length of Ranking (k)", fontsize=20)
         
         if self.delta_max is not None:
-        #     plt.hlines(y=self.delta_max, xmin=1,xmax=self.num_docs, color='black', linestyle='dashed')
-        #     plt.hlines(y=-self.delta_max, xmin=1,xmax=self.num_docs, color='black', linestyle='dashed')
+            plt.hlines(y=self.delta_max, xmin=1,xmax=self.num_docs, color='black', linestyle='dashed')
+            plt.hlines(y=-self.delta_max, xmin=1,xmax=self.num_docs, color='black', linestyle='dashed')
             delta_max=np.max(self.delta_max)
             plt.text(self.num_docs/2, delta_max+self.offset, r'$\delta_{max}$', c='black', fontsize=20)
             plt.text(self.num_docs/2, -delta_max-self.offset, r'$-\delta_{max}$', c='black', fontsize=20)
@@ -257,7 +256,7 @@ class simpleOffline(GeneralExperiment):
         self.total_cost = np.zeros((len(rankingAlgos), self.num_docs))
         self.EO_constraint = np.zeros((len(rankingAlgos), self.num_docs))
         self.ranking={}
-        self.delta_max = np.zeros((self.num_docs))
+        
         plt.rcParams["figure.figsize"] = figsize
         self.posteriorPredictiveAlg(simulations, rankingAlgos)
 

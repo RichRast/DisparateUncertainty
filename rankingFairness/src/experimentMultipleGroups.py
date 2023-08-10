@@ -191,7 +191,7 @@ class simpleOfflineMultipleGroups(GeneralExperiment):
         fig, ax = plt.subplots(figsize=(6,6))
         for a, rankingAlg in enumerate(rankingAlgos):
             ax.plot(np.arange(self.num_docs)+1, self.EO_constraint[a, :], label=str(rankingAlg.name()), c=self.colorMap[rankingAlg.name()])
-        ax.plot(np.arange(self.num_docs)+1, self.delta_max, label=r'$\delta_{max}$', c='black', linestyle='dashed')
+        
             
         if len(self.predfined_ls)==2:
             plt.ylabel(r'$\bf{\delta(\sigma_k) = \frac{n(A|\sigma_k) }{n(A)}- \frac{n(B|\sigma_k)}{n(B)}}$', fontsize=20)
@@ -199,11 +199,11 @@ class simpleOfflineMultipleGroups(GeneralExperiment):
             plt.ylabel(r'$\bf{\delta(\sigma_k) = \max_{g} \left(\frac{n(g|\sigma_k) }{n(g)}\right)- \min_{g} \left(\frac{n(g|\sigma_k)}{n(g)}\right)}$', fontsize=20)
         plt.xlabel("Length of Ranking (k)", fontsize=20)
         
-        # if self.delta_max is not None:
-        #     plt.hlines(y=self.delta_max, xmin=1, xmax=self.num_docs, color='black', linestyle='dashed')
-        #     plt.hlines(y=-self.delta_max, xmin=1, xmax=self.num_docs, color='black', linestyle='dashed')
-        #     plt.text(self.num_docs/2, self.delta_max+self.offset, r'$\delta_{max}$', c='black', fontsize=20)
-        #     plt.text(self.num_docs/2, -self.delta_max-self.offset, r'$-\delta_{max}$', c='black', fontsize=20)
+        if self.delta_max is not None:
+            plt.hlines(y=self.delta_max, xmin=1, xmax=self.num_docs, color='black', linestyle='dashed')
+            plt.hlines(y=-self.delta_max, xmin=1, xmax=self.num_docs, color='black', linestyle='dashed')
+            plt.text(self.num_docs/2, self.delta_max+self.offset, r'$\delta_{max}$', c='black', fontsize=20)
+            plt.text(self.num_docs/2, -self.delta_max-self.offset, r'$-\delta_{max}$', c='black', fontsize=20)
         
         n_majority=sum([p.getMean() for p in self.predfined_ls[0]])
         n_minority=sum([p.getMean() for p in self.predfined_ls[1]])
@@ -249,6 +249,7 @@ class simpleOfflineMultipleGroups(GeneralExperiment):
     def experiment(self, rankingAlgos, simulations, figsize=(20,5)):
         """
         Args:
+            timesteps: (int) how many steps for the algo to learn the bandit
             simulations: (int) number of epochs
         """
         names=[]
@@ -256,7 +257,7 @@ class simpleOfflineMultipleGroups(GeneralExperiment):
         self.cost_groups = np.zeros((len(rankingAlgos), self.groups, self.num_docs))
         self.total_cost = np.zeros((len(rankingAlgos), self.num_docs))
         self.EO_constraint = np.zeros((len(rankingAlgos), self.num_docs))
-        self.delta_max = np.zeros((self.num_docs))
+        
         self.ranking={}
         if self.verbose:
             self.EOR_std=np.zeros((len(rankingAlgos), self.num_docs))

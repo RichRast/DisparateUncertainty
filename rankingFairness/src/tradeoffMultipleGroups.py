@@ -127,6 +127,11 @@ class UtilityCost():
             for g in range(self.groups):
                 self.rel_groups[g]=np.array([d.getMean(funcApply=funcApply) for d in dist[g]])
         
+        if self.groups==2:      
+            self.delta_max = sum([np.max(self.rel_groups[g], axis=0)/self.n_group[g] for g in range(self.groups)])/self.groups
+        else:
+            self.delta_max = max([np.max(self.rel_groups[g], axis=0)/self.n_group[g] for g in range(self.groups)])
+
 
     def getMaskRanking(self):
         positions = np.zeros_like(self.ranking)
@@ -146,11 +151,6 @@ class UtilityCost():
             idxs_group = (np.array(self.group_ids)==g)
             # Make mask = 0 for all items not in group g
             self.group_mask[:, g, ~idxs_group] = 0
-
-        if self.groups==2:      
-            self.delta_max = sum([np.max(self.rel_groups[g], axis=0)/self.n_group[g] for g in range(self.groups)])/self.groups
-        else:
-            self.delta_max = max([np.max(self.rel_groups[g], axis=0)/self.n_group[g] for g in range(self.groups)])
 
 
     def EOR_constraint(self, dist, merit_all):
