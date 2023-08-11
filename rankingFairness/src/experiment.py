@@ -51,8 +51,8 @@ class simpleOffline(GeneralExperiment):
                         'DP':'tab:grey',
                         'Uniform':'tab:green', 
                         'EOR':'tab:red',
-                        'others':'tab:olive',
-                        'RR':'tab:brown',
+                        'others':'tab:brown',
+                        'RR':'tab:olive',
                         'DC':'tab:pink'}
         self.markers=['s', 'X', 'o', 'P']
         self.distType = distType
