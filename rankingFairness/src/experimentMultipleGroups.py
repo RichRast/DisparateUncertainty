@@ -44,7 +44,6 @@ class simpleOfflineMultipleGroups(GeneralExperiment):
         super().__init__(num_groups)
         self.num_docs = num_docs
         self.online=online
-        # self.setGroups()
         self.predfined_ls=predfined_ls
         self.groups=len(self.predfined_ls)
         self.colorMap={'PRP':'tab:blue', 
