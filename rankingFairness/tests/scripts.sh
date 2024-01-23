@@ -1,1 +1,0 @@
-python3 -m pytest ./rankingFairness/tests/funcs_tests.py --hypothesis-show-statistics
