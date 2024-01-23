@@ -29,14 +29,14 @@ conda activate ranking_uncertainty
 In the scripts folder, customize the script ```init_env.sh``` for your environment and path. This path is then referenced in ```./scripts/combined_sbatch.sub``` . -->
 
 
-## Examples
+<!-- ## Examples
 Notebook  "Duality Thm1" for evaluating the theorem 6.1 example of cost optimality gap.
 
 Notebook  "Markup_Amazon_Analysis" for analysis of Amazon search queries experiment.
 
 Notebook  "USCensus_experiment" and "Census_plot" for experiment and plotting of USCensus dataset.
 
-Notebook  "Synthetic plots" can be used to run synthetic examples for given $G$ groups and specific expected relevance estimates $P(r_i|D)$.
+Notebook  "Synthetic plots" can be used to run synthetic examples for given $G$ groups and specific expected relevance estimates $P(r_i|D)$. -->
 
 ## Citation
 
