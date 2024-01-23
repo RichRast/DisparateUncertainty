@@ -3,3 +3,4 @@
 *.ipynb_checkpoints*
 *tex_arxiv/*
 *tests
+*__pycache__*
