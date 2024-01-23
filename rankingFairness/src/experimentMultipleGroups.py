@@ -1,11 +1,12 @@
 import numpy as np
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
-from rankingFairness.src.distributions import Bandit, Bernoulli
+from rankingFairness.src.distributions import BetaAlgo, Bernoulli
 from rankingFairness.src.tradeoffMultipleGroups import UtilityCost
 from rankingFairness.src.utils import getGroupNames
 from rankingFairness.src.decorators import timer
-from rankingFairness.src.rankingsMultipleGroups import Uniform_Ranker, TS_RankerII, EO_RankerII, DP_Ranker
+from rankingFairness.src.rankingsMultipleGroups import Uniform_Ranker, TS_RankerII, EO_RankerII, DP_Ranker, parallelRanker, epiRAnker, exposure, exposure_DP
+
 import pdb
 import random
 from copy import deepcopy
@@ -13,6 +14,7 @@ from matplotlib.lines import Line2D
 from scipy.stats import beta as beta_dist
 import seaborn as sns
 from tqdm import tqdm
+
 from IPython.display import set_matplotlib_formats
 set_matplotlib_formats('pdf', 'svg')
 from matplotlib import rcParams
@@ -22,6 +24,16 @@ matplotlib.style.use('classic')
 import os
 import os.path as osp
 
+MARKERS = ['s', 'o', 'X', 'P', 'D']
+COLORMAP = {'PRP':'tab:blue', 
+                        'TS':'tab:orange', 
+                        'DP':'tab:grey',
+                        'Uniform':'tab:green', 
+                        'EOR':'tab:red',
+                        'PRR':'tab:olive',
+                        'RA':'tab:cyan',
+                        'EXP':'tab:purple',
+                        'DPE': 'tab:pink'}
 
 class GeneralExperiment(ABC):
     def __init__(self, num_groups) -> None:
@@ -39,22 +51,16 @@ class GeneralExperiment(ABC):
 
 
 class simpleOfflineMultipleGroups(GeneralExperiment):
-    def __init__(self, num_groups, num_docs, predfined_ls, distType, online=False, 
-    merits=None, plot=True, saveFig=None, offset=0.05, verbose=False, switch_start=False) -> None:
+    def __init__(self, num_groups, num_docs, predfined_ls, distType, online=False, plot_median=True, 
+    merits=None, plot=True, saveFig=None, offset=0.05, verbose=False) -> None:
         super().__init__(num_groups)
         self.num_docs = num_docs
         self.online=online
+        self.experimentSetup='Offline'
         self.predfined_ls=predfined_ls
         self.groups=len(self.predfined_ls)
-        self.colorMap={'PRP':'tab:blue', 
-                        'TS':'tab:orange', 
-                        'DP':'tab:grey',
-                        'Uniform':'tab:green', 
-                        'EOR':'tab:red',
-                        'others':'tab:brown',
-                        'RR':'tab:olive',
-                        'DC':'tab:pink'}
-        self.markers=['s', 'X', 'o', 'P']*self.groups
+        self.colorMap=COLORMAP
+        self.markers = MARKERS*self.groups
         self.lineMap=["dashed", "dotted"]*self.groups
         self.distType = distType
         self.delta_max=None
@@ -68,7 +74,7 @@ class simpleOfflineMultipleGroups(GeneralExperiment):
         self.saveFig=saveFig
         if (self.saveFig is not None) and (not osp.exists(self.saveFig)):
                 os.makedirs(self.saveFig)
-        self.switch_start=switch_start
+        self.plot_median=plot_median
 
     def setGroups(self):
         self.majority_ids=np.arange(self.start_minority_idx)
@@ -86,44 +92,56 @@ class simpleOfflineMultipleGroups(GeneralExperiment):
     def posteriorPredictiveAlg(self, simulations, rankingAlgos):
 
         a_EOR=None
+        rankingAlgoInst=[]
         for a, rankingAlg in enumerate(rankingAlgos):
             ranker = rankingAlg(self.predfined_ls, distType=self.distType)
-        
-            if isinstance(ranker, Uniform_Ranker):
-                ranking_simulations = np.ones((simulations, self.num_docs), dtype=int)
-                for e in tqdm(range(simulations)):
-                    ranker.rank(self.num_docs)
-                    ranking_simulations[e]=ranker.ranking
-                self.ranking[a]=ranking_simulations
-            elif isinstance(ranker, TS_RankerII):
-                ranker.rank(self.num_docs, simulations)
-                self.ranking[a]=ranker.ranking
+            rankingAlgoInst.append(ranker)
+            if isinstance(ranker, Uniform_Ranker) or isinstance(ranker, TS_RankerII):
+                if self.plot_median:
+                    ranker.rank(self.num_docs, simulations)
+                    self.ranking[a]=np.array(ranker.ranking)[None,:]
+                else:
+                    ranker.rank_sim(self.num_docs, simulations)
+                    self.ranking[a]=ranker.ranking
+            elif isinstance(ranker, exposure) or isinstance(ranker, exposure_DP):
+                pass
             else:
                 ranker.rank(self.num_docs)
                 self.ranking[a]=np.array(ranker.ranking)[None,:]
                 if isinstance(ranker, EO_RankerII):
                     a_EOR=a
+                elif isinstance(ranker, epiRAnker):
+                    self.RA_exp_achieved=ranker.exp_achieved
                     
         for top_k in range(self.num_docs):    
-            for a, rankingAlg in enumerate(rankingAlgos):
-                utilCostObj= UtilityCost(self.ranking[a], self.num_docs, top_k+1, simulations, self.groups, n_labels=self.n_labels)
-                self.dcgUtil[a, top_k] = utilCostObj.getUtil(self.predfined_ls, self.merits)
-                utilCostObj.getCostArms(self.predfined_ls, self.merits)
-                self.cost_groups[a, :, top_k] =utilCostObj.cost_groups
-                self.total_cost[a, top_k]=utilCostObj.cost
-                EOR_obj=utilCostObj.EOR_constraint(self.predfined_ls, self.merits)
-                self.EO_constraint[a, top_k]=EOR_obj[0]
-                if self.verbose:
-                    self.EOR_std[a, top_k]=EOR_obj[2]
-                    self.total_cost_std[a, top_k]=utilCostObj.total_cost_std
-                    self.group_cost_std[a, :, top_k]=utilCostObj.group_cost_std
+            for a, rankingAlg in enumerate(rankingAlgoInst):
+                if isinstance(rankingAlg, exposure) or isinstance(rankingAlg, exposure_DP):
+                    pass
+                else:
+                    utilCostObj= UtilityCost(self.ranking[a], self.num_docs, top_k+1, simulations, self.groups, n_labels=self.n_labels)
+                    self.dcgUtil[a, top_k] = utilCostObj.getUtil(self.predfined_ls, self.merits)
+                    utilCostObj.getCostArms(self.predfined_ls, self.merits)
+                    self.cost_groups[a, :, top_k] =utilCostObj.cost_groups
+                    self.total_cost[a, top_k]=utilCostObj.cost
+                    EOR_obj=utilCostObj.EOR_constraint(self.predfined_ls, self.merits)
+                    self.EO_constraint[a, top_k]=EOR_obj[0]
+                    if self.verbose:
+                        self.EOR_abs_avg[a, top_k]=EOR_obj[2]
+                        self.total_cost_std[a, top_k]=utilCostObj.total_cost_std
+                        self.group_cost_std[a, :, top_k]=utilCostObj.group_cost_std
         
-        self.delta_max=EOR_obj[1]
+                    self.delta_max=EOR_obj[1]
+        for a, rankingAlg in enumerate(rankingAlgoInst):
+            if isinstance(rankingAlg, exposure):
+                ranker_exp = exposure(self.predfined_ls, distType=self.distType)
+                self.EO_constraint[a, :], self.total_cost[a, :], self.cost_groups[a, :, :], self.dcgUtil[a, :], self.EOR_abs_avg[a, :] = ranker_exp.rank(self.num_docs, merits=self.merits)
+            if isinstance(rankingAlg, exposure_DP):
+                ranker_exp_dp = exposure_DP(self.predfined_ls, distType=self.distType)
+                self.EO_constraint[a, :], self.total_cost[a, :], self.cost_groups[a, :, :], self.dcgUtil[a, :], self.EOR_abs_avg[a, :] = ranker_exp_dp.rank(self.num_docs, merits=self.merits)
+        
         if a_EOR is not None and (self.merits is None):
             assert np.all(self.EO_constraint[a_EOR, :]<=self.delta_max), f"{np.max(self.EO_constraint[a_EOR, :])}, delta_max: {self.delta_max}"
                             
-        # if (a_EOR is not None) and (self.merits is None):
-        #     assert np.allclose(np.abs(self.EO_constraint[a_EOR, :])<=self.delta_max, np.full((self.num_docs), True, dtype=bool)), f"{self.EO_constraint[a_EOR, self.EO_constraint[a_EOR,:]>self.delta_max]}, {self.delta_max[self.EO_constraint[a_EOR,:]>self.delta_max]}, k:{np.where(self.EO_constraint[a_EOR,:]>self.delta_max)[0]}"
             
         if self.plot:
             self.visualize_Cost(rankingAlgos)
@@ -137,12 +155,10 @@ class simpleOfflineMultipleGroups(GeneralExperiment):
         for a, rankingAlg in enumerate(rankingAlgos):
             ax.plot(np.arange(self.num_docs)+1, self.dcgUtil[a, :], label=f"{rankingAlg.name()}", c=self.colorMap[rankingAlg.name()], marker = '.',linewidth=1, markersize=1)
 
-        # plt.grid()   
+
         plt.xlabel("Length of Ranking (k)", fontsize=20)
         plt.ylabel(r'DCG $U[\pi_k]$', fontsize=20)
-        # plt.legend(fontsize=12, loc='upper center', 
-        # bbox_to_anchor=(0.5, 1.35),
-        # ncol=3)
+
         plt.ylim(-self.offset, np.max(self.dcgUtil) + self.offset)
         plt.xlim(1-self.offset, self.num_docs+self.offset)
         plt.tight_layout() 
@@ -158,27 +174,18 @@ class simpleOfflineMultipleGroups(GeneralExperiment):
         end_index=int(self.num_docs/3)
         for a, rankingAlg in enumerate(rankingAlgos):
             for g in range(self.groups):
-                # ax[0].plot(np.arange(self.num_docs)+1, self.cost_groups[a, g, :], linestyle=self.lineMap[g], marker=self.markers[g], markerfacecolor='w', markersize=12, markevery=(start_index, end_index), c=self.colorMap[rankingAlg.name()], markeredgecolor=self.colorMap[rankingAlg.name()], linewidth=3)
                 ax[0].plot(np.arange(self.num_docs)+1, self.cost_groups[a, g, :], linestyle=self.lineMap[g], c=self.colorMap[rankingAlg.name()], linewidth=3)
             ax[1].plot(np.arange(self.num_docs)+1, self.total_cost[a, :], linestyle='solid', c=self.colorMap[rankingAlg.name()], linewidth=1)    
             
         handles, labels = plt.gca().get_legend_handles_labels()
-        # for g in range(self.groups):
-        #     group_lines= Line2D([], [], color='black', linestyle=self.lineMap[g], label=f'Group {g} Cost')
-        #     handles.extend([group_lines])
-        
+
         
         fig.supxlabel("Length of Ranking (k)", fontsize=20)
         fig.supylabel(f"Costs ", fontsize=20)
-        # pos = ax.get_position()
-        # ax.set_position([pos.x0, pos.y0, pos.width, pos.height * 0.7])
-        # plt.legend(handles=handles, fontsize=12, loc='upper center', 
-        # bbox_to_anchor=(0.5, 1.35),
-        # ncol=3)
         for axis in ax.ravel():
             axis.set_ylim(-self.offset, 1 + self.offset)
             axis.set_xlim(1-self.offset, self.num_docs+self.offset)
-        # plt.grid()
+        
         fig.tight_layout() 
         if self.saveFig is not None:
             plt.savefig(f"{osp.join(self.saveFig,'Cost.pdf')}")
@@ -206,26 +213,18 @@ class simpleOfflineMultipleGroups(GeneralExperiment):
         
         n_majority=sum([p.getMean() for p in self.predfined_ls[0]])
         n_minority=sum([p.getMean() for p in self.predfined_ls[1]])
-        # if self.verbose:
-        #     relevance_handle = ax.plot([], [], ' ', label=f'$n_A={{{n_majority}}}, n_B={{{n_minority}}}$')
-        #     size_handle = ax.plot([], [], ' ', label=f'$\vert A \vert={{{self.start_minority_idx}}}, \vert B \vert={{{self.num_docs-self.start_minority_idx}}}$')
+        
         handles, labels = ax.get_legend_handles_labels()
         majority_lines= Line2D([], [], color='black', linestyle='dashed', linewidth=3, label=r'Majority (group A) Cost')
         minority_lines= Line2D([], [], color='black', linestyle='dotted',  linewidth=3, label=r'Minority (group B) Cost')
         total_lines = Line2D([], [], color='black', linestyle='solid',  linewidth=3, label=r'Total Cost')
         handles.extend([majority_lines, minority_lines, total_lines])
-        # legend=plt.legend(handles=handles, fontsize=12, loc='upper center', 
-        # bbox_to_anchor=(0.5, 1.35),
-        # ncol=8)
+
         plt.xlim(1-self.offset, self.num_docs+self.offset)
         plt.tight_layout()
         if self.saveFig is not None:
             plt.savefig(f"{osp.join(self.saveFig,'EO.pdf')}", bbox_inches='tight')
-            # bbox=legend.get_window_extent()
-            # expand=[-5,-5,5,5]
-            # bbox = bbox.from_extents(*(bbox.extents + np.array(expand)))
-            # bbox = bbox.transformed(fig.dpi_scale_trans.inverted())
-            # plt.savefig(f"{osp.join(self.saveFig,'legend.pdf')}", bbox_inches=bbox)
+            
         plt.show()
         plt.close()
 
@@ -259,10 +258,11 @@ class simpleOfflineMultipleGroups(GeneralExperiment):
         
         self.ranking={}
         if self.verbose:
-            self.EOR_std=np.zeros((len(rankingAlgos), self.num_docs))
+            self.EOR_abs_avg=np.zeros((len(rankingAlgos), self.num_docs))
             self.total_cost_std=np.zeros((len(rankingAlgos), self.num_docs))
             self.group_cost_std=np.zeros((len(rankingAlgos), self.groups, self.num_docs))
 
         plt.rcParams["figure.figsize"] = figsize
         self.posteriorPredictiveAlg(simulations, rankingAlgos)
 
+    
