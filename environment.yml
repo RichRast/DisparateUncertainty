@@ -1,4 +1,4 @@
-name: ranking_longTerm
+name: ranking_fairness
 channels:
   - pytorch
   - anaconda
@@ -221,7 +221,7 @@ dependencies:
     - littleutils==0.2.2
     - matplotlib==3.8.2
     - mypy-extensions==0.4.4
-    - numpy==1.26.3
+    - numpy==1.23.5
     - obp==0.5.7
     - omegaconf==2.3.0
     - osqp==0.6.5
