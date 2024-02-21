@@ -1,4 +1,4 @@
-name: ranking_fairness
+name: ranking_uncertainty
 channels:
   - conda-forge
   - defaults
