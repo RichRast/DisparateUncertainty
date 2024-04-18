@@ -9,6 +9,7 @@ from rankingFairness.src.utils import MaxPriorityQueue, getProbsDict
 from rankingFairness.src.decorators import timer
 from rankingFairness.src.Baselines.rankAggregationBaselines import epiRA, calc_exposure_ratio
 from rankingFairness.src.Baselines.exposureBaselines import getExposureMetrics
+from rankingFairness.src.Baselines.fairsearch import getFSMetrics
 from tqdm import tqdm
 
 EPSILON=1e-12
@@ -86,11 +87,11 @@ class Uniform_Ranker(Ranker):
             ranking_tmp[e,:] = np.random.choice(np.arange(top_k), top_k, replace=False)
             abs_EOR_summary[e:,]= self.getEORSummary(ranking_tmp[e,:])
         idx = (np.abs(abs_EOR_summary - np.median(abs_EOR_summary))).argmin()
-
+        # idx = np.argwhere(np.isclose(abs_EOR_summary, np.median(abs_EOR_summary), rtol=EPSILON, atol=EPSILON))[0].item()
         self.ranking = ranking_tmp[idx,:]
     
     def getEORSummary(self, ranking):
-        n_group_ranking = np.full((self.groups,ranking.shape[0]), 0.0, dtype=float) 
+        n_group_ranking = np.full((self.groups,ranking.shape[0]), 0.0, dtype=float) # shape is number of groups by rank (col 0 is rank 1)
         for k, r in enumerate(ranking):
             if k >0:
                 n_group_ranking[:,k] = n_group_ranking[:,k-1]
@@ -127,6 +128,17 @@ class TS_RankerII(Ranker):
     def sampleMerits(self):
         meritObj = self.distType(self.dist)
         return meritObj.sample()
+    
+    # def rank(self, top_k, simulations) -> np.ndarray:
+    #     ranking_tmp = np.zeros((simulations, top_k))
+    #     merits = np.full((simulations, top_k), np.inf)
+    #     for e in tqdm(range(simulations)):
+    #         merits[e,:] = self.sampleMerits()
+    #     b=np.random.random((simulations, top_k))
+    #     ranking_tmp = np.lexsort((b,merits), axis=1)[:,::-1]
+    #     abs_EOR_summary = self.getEORSummary(ranking_tmp, simulations)
+    #     idx = np.argwhere(np.isclose(abs_EOR_summary, np.median(abs_EOR_summary), rtol=EPSILON, atol=EPSILON))[0].item()
+    #     self.ranking = ranking_tmp[idx,:]
     
     def rank_sim(self, top_k, simulations) -> np.ndarray:
         merits = np.full((simulations, top_k), np.inf)
@@ -166,6 +178,102 @@ class TS_RankerII(Ranker):
 class UCB_Ranker(Ranker):
     pass
 
+class EO_Ranker(Ranker):
+    def __init__(self, dist, ucb=None, distType=None, switch_start=False) -> None:
+        super().__init__(dist, ucb, distType)
+        self.num_ids = len(dist[0]) + len(dist[1])
+        self.ids = np.array([i for i in range(self.num_ids)])
+        self.start_minority_idx = len(dist[0])
+        probs_all, n_group = self.getExpectedRel(dist)
+        self.n_group = n_group
+        self.probs_all = probs_all
+        # self.delta = max([self.probs_all[i]/self.n_group[j] for i,j in zip(self.ids, [0]*len(dist[0])+ [1]*len(dist[1]))])
+        majority_rel = np.array([d.getMean() for d in dist[0]])[:,None]
+        minority_rel = np.array([d.getMean() for d in dist[1]])[:,None]
+        self.delta = ((np.sort(majority_rel, axis=0)[-1]/self.n_group[0]) + (np.sort(minority_rel, axis=0)[-1]/self.n_group[1]))/2
+        self.queue=[]
+        for i in range(len(dist)):
+            self.queue.append(MaxPriorityQueue())
+            self.formQueue(i)
+        print(self.delta)
+        self.arm_a=0.0
+        self.arm_b=0.0
+
+    @staticmethod
+    def name():
+        return "EORI"
+    
+    def formQueue(self, g):
+        if self.ucb is not None:
+            pMeans=self.ucb[g]
+        else:
+            pMeans=np.array([p.getMean() for p in self.dist[g]])
+        for ids, val in zip(np.arange(len(pMeans)), pMeans):
+            self.queue[g].add(val, ids)
+
+    def getExpectedRel(self, dist):
+        probs_all, n_group = getProbsDict(self.num_ids, dist)
+        return probs_all, n_group
+
+    def rank(self, top_k=None) -> np.ndarray:
+        EOR_monitor =[]
+        self.ranking = []
+        j = 0
+        
+        while j < top_k:
+            EOR_compare=[]
+            a,b=None, None
+            assert len(self.queue[0]) + len(self.queue[1]) > 0 
+            if len(self.queue[0]) > 0 : 
+                a = self.queue[0].peek_max()[1]
+                EOR_compare.append(self.getEOR(self.ranking + [a]))
+            if len(self.queue[1]) > 0 : 
+                b = self.start_minority_idx + self.queue[1].peek_max()[1]
+                EOR_compare.append(self.getEOR(self.ranking + [b]))
+            
+            EO_satisfy_indices = np.argwhere(EOR_compare<=self.delta)[:,0]
+            assert len(EO_satisfy_indices)>0, f"EOR:{EOR_compare}"
+            if (len(EO_satisfy_indices)==2):
+                if (abs(EOR_compare[0]-EOR_compare[1])<=EPSILON):
+                    selected_idx = np.random.choice(np.arange(len(EO_satisfy_indices)), 1).item()
+                    print(selected_idx)
+                elif self.probs_all[a]>self.probs_all[b]:
+                    selected_idx=0
+                else:
+                    selected_idx=1
+                if selected_idx==0:
+                    selected_arm = a
+                    self.queue[0].pop_max()
+                    self.arm_a=self.probs_all[a]
+                else:
+                    selected_arm = b
+                    self.queue[1].pop_max()
+                    self.arm_b=self.probs_all[b]
+            elif (EO_satisfy_indices[0]==0) and (a is not None) and (len(EO_satisfy_indices)==1):
+                selected_arm = a
+                self.queue[0].pop_max()
+                self.arm_a=self.probs_all[a]
+            else:
+                selected_arm = b
+                self.queue[1].pop_max()
+                self.arm_b=self.probs_all[b]
+
+            self.ranking.append(selected_arm)
+            j+=1
+            EOR_monitor.append(self.getEOR(self.ranking))
+
+        return EOR_monitor
+
+    def getEOR(self, ranking):
+        # add unit test for EOR calculation
+        ids_majority_ranking = np.intersect1d(ranking, self.ids[:self.start_minority_idx])
+        ids_minority_ranking = np.intersect1d(ranking, self.ids[self.start_minority_idx:])
+        if len(ids_minority_ranking)>0: 
+            ids_minority_ranking -= self.start_minority_idx
+        n_majority_ranking = sum([d.getMean() for d in np.array(self.dist[0])[ids_majority_ranking]]) if len(ids_majority_ranking)>0 else 0
+        n_minority_ranking = sum([d.getMean() for d in np.array(self.dist[1])[ids_minority_ranking]]) if len(ids_minority_ranking)>0 else 0
+        EOR = (n_majority_ranking/self.n_group[0]) - (n_minority_ranking/self.n_group[1])
+        return np.abs(EOR)
 
 class EO_RankerII(Ranker):
     def __init__(self, dist, ucb=None, distType=None, switch_start=False) -> None:
@@ -221,7 +329,7 @@ class EO_RankerII(Ranker):
         self.n_group_ranking = np.full(self.groups, 0.0)
         
         self.last_element = np.full(self.groups, 0.0)
-        
+        #fill up the last element with the first element of that group
         for g in range(self.groups):
             self.last_element[g] = self.queue[g].peek_max()[0]
         
@@ -236,18 +344,18 @@ class EO_RankerII(Ranker):
                     arm[g] = self.queue[g].peek_max()[1]
                     EOR_compare[g] = self.getEOR(arm[g].item())
 
-            
+            # print(f"EOR_compare:{EOR_compare}, k:{j}")
             selected_groups = np.where(EOR_compare==np.min(EOR_compare))[0]
             assert len(selected_groups)>=1
             if len(selected_groups)>1:
                 selected_group=np.random.choice(selected_groups,1).item()
-                
+                # print(f"randomly selected group:{selected_group}, when these groups had same val:{selected_groups}")
             else:
                 selected_group = selected_groups.item()
             
-           
+            # print(f"selected_group:{selected_group}")
             selected_arm = self.queue[selected_group].peek_max()[1]
-            
+            # print(f"selected_arm:{selected_arm}")
             self.n_group_ranking[selected_group] += self.probs_all[selected_arm]/self.n_group[selected_group]
             self.queue[selected_group].pop_max()
             self.ranking.append(selected_arm)
@@ -257,6 +365,7 @@ class EO_RankerII(Ranker):
         
 
     def getEOR(self, i):
+        # add unit test for EOR calculation
         n_group_ranking = self.n_group_ranking.copy()
         g = self.group_ids[int(i)]
         n_group_ranking[g] += self.probs_all[i]/self.n_group[g]
@@ -315,21 +424,29 @@ class DP_Ranker(Ranker):
                 if len(self.queue[g]) > 0 : 
                     DPR_compare[g] = self.getDPR(g)
 
+            # print(f"DPR_compare:{DPR_compare}, k:{j}")
             selected_groups = np.where(DPR_compare==np.min(DPR_compare))[0]
             assert len(selected_groups)>=1
             if len(selected_groups)>1:
                 selected_group=np.random.choice(selected_groups,1).item()
+                # print(f"randomly selected group:{selected_group}, when these groups had same val:{selected_groups}")
             else:
                 selected_group = selected_groups.item()
+            # print(f"selected_group:{selected_group}")
             selected_arm = self.queue[selected_group].peek_max()[1]
+            # print(f"selected_arm:{selected_arm}")
             
             self.s_group_ranking[selected_group] += 1/self.s_group[selected_group]
             self.queue[selected_group].pop_max()
             self.ranking.append(selected_arm)
             j+=1
 
+            # print(f"k:{j}, ranking:{self.ranking}")
+            # print(f" s_group_ranking:{self.s_group_ranking}")
+
 
     def getDPR(self, g):
+        # add unit test for EOR calculation
         s_group_ranking = self.s_group_ranking.copy()
         s_group_ranking[g] += 1/self.s_group[g]
         DPR = np.max(s_group_ranking, axis=0)-np.min(s_group_ranking, axis=0)
@@ -381,7 +498,34 @@ class DP_RankerIII(Ranker):
             self.queue[selected_idx].pop_max()
             self.ranking.append(selected_arm)
 
+class parallelRanker():
+    def __init__(self, draws, ranker, distType, num_docs):
+        super().__init__()
+        """
+        Wrapper class to run many rankers in parallel
+        """
+        self.draws = draws 
+        self.ranker = ranker
+        self.dist = dist
+        self.rankers = np.full(num_rankers, 0)
+        self.num_docs = num_docs
+        self.distType = distType
 
+    def rank(self):
+    #     np.vectorize(self.rankingAlg)(self.rankers)
+
+        
+    #         ranker.rank(self.num_docs)
+    #         ranking_deterministic[a, i, top_k, :,:,d] = ranker.ranking
+        
+       
+    #     self.ranking[a]=ranking_deterministic[a,...]
+        pass
+    
+    def __call__(self):
+        for d in range(draws):
+            self.rankers[d] = self.ranker(self.dist[d], self.distType)
+        return np.array([a.rank(self.num_docs) for a in self.rankers])
 
 class epiRAnker(Ranker):
     def __init__(self, dist, ucb=None, distType=None, switch_start=False) -> None:
@@ -533,3 +677,50 @@ class exposure_DP(Ranker):
             merits = merits.T
         EOR, total_cost, group_cost, DCG, EOR_abs = getExposureMetrics(rel, np.array(self.group_ids), self.n_group, merits=merits, dp=True)
         return EOR, total_cost, group_cost, DCG, EOR_abs
+
+class fairSearch(Ranker):
+    def __init__(self, dist, ucb=None, distType=None, alpha=0.1, p=0.5, switch_start=False) -> None:
+        super().__init__(dist, ucb, distType)
+        self.groups = len(dist)
+        self.num_ids = 0
+        self.alpha=alpha
+        self.p = p
+        for g in range(self.groups):
+            self.num_ids += len(dist[g]) 
+        self.ids = np.array([i for i in range(self.num_ids)])
+
+        self.group_ids = []
+        self.s_group=np.full(self.groups,0)
+        for g, d in enumerate(dist):
+            for _ in range(len(d)):
+                self.group_ids.append(g)
+            self.s_group[g]=len(d)
+        
+        self.queue=MaxPriorityQueue()
+        self.formQueue()
+
+    @staticmethod
+    def name():
+        return "FS"
+
+    def formQueue(self):
+        pMeans_ls=[]
+        for i in range(len(self.dist)):
+            pMeans_ls.append([p.getMean() for p in self.dist[i]])
+        pMeans = np.concatenate((pMeans_ls))
+        for ids, val in zip(np.arange(len(pMeans)), pMeans):
+            self.queue.add(val, ids)
+
+
+    def rank(self, top_k=None) -> np.ndarray:
+        PRP_ranking = np.full((top_k,),0, dtype=int)
+        PRP_rel = np.full((top_k,),0.0)
+        for i in range(top_k):
+            rel, rel_id = self.queue.pop_max()
+            PRP_ranking[i]=rel_id
+            PRP_rel[i]=rel
+        # PRP_ranking = np.array([self.queue.pop_max()[1] for _ in range(top_k)])
+        PRP_group_ids=np.array([self.group_ids[i] for i in PRP_ranking])
+        # PRP_rel = np.array([self.queue.pop_max()[0] for _ in range(top_k)])
+        current_ranking = getFSMetrics(PRP_rel=PRP_rel, PRP_group_ids=PRP_group_ids, PRP_ranking=PRP_ranking, alpha=self.alpha, p=self.p)
+        self.ranking = list(current_ranking)
