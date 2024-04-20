@@ -40,5 +40,13 @@ Notebook  "Synthetic plots" can be used to run synthetic examples for given $G$ 
 
 ## Citation
 
+```
+@misc{rastogi2023fair,
+    title={Fair Ranking under Disparate Uncertainty},
+    author={Richa Rastogi and Thorsten Joachims},
+    year={2023},
+    archivePrefix={arXiv}
+}
+```
 
 ## Feedback
