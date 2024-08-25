@@ -3,8 +3,6 @@ import random
 from abc import ABC, abstractmethod
 import math
 import itertools
-from scipy.optimize import linprog
-import pdb
 from rankingFairness.src.utils import MaxPriorityQueue, getProbsDict
 from rankingFairness.src.decorators import timer
 from rankingFairness.src.Baselines.rankAggregationBaselines import epiRA, calc_exposure_ratio
@@ -528,7 +526,7 @@ class parallelRanker():
         return np.array([a.rank(self.num_docs) for a in self.rankers])
 
 class epiRAnker(Ranker):
-    def __init__(self, dist, ucb=None, distType=None, switch_start=False) -> None:
+    def __init__(self, dist, ucb=None, distType=None, switch_start=False, verbose=True) -> None:
         super().__init__(dist, ucb, distType)
         self.groups = len(dist)
         self.num_ids = 0
@@ -546,7 +544,9 @@ class epiRAnker(Ranker):
         self.queue=MaxPriorityQueue()
         self.formQueue()
         self.lmbd=0.95
-        print(f" with exposure threshold as :{self.lmbd}")
+        self.verbose=verbose
+        if self.verbose:
+            print(f" with exposure threshold as :{self.lmbd}")
 
     @staticmethod
     def name():
@@ -564,12 +564,13 @@ class epiRAnker(Ranker):
     def rank(self, top_k=None) -> np.ndarray:
         PRP_ranking = np.array([self.queue.pop_max()[1] for _ in range(top_k)])
         PRP_group_ids=np.array([self.group_ids[i] for i in PRP_ranking])
-        current_ranking, current_group_ids, cur_exp = epiRA(None, item_ids=self.ids, group_ids=self.group_ids, bnd=self.lmbd, grporder=True, current_ranking=PRP_ranking, current_group_ids=PRP_group_ids)
+        current_ranking, current_group_ids, cur_exp = epiRA(None, item_ids=self.ids, group_ids=self.group_ids, bnd=self.lmbd,
+         grporder=True, current_ranking=PRP_ranking, current_group_ids=PRP_group_ids, verbose=self.verbose)
         self.ranking = list(current_ranking)
         self.exp_achieved = cur_exp
 
 class exposure(Ranker):
-    def __init__(self, dist, ucb=None, distType=None, switch_start=False) -> None:
+    def __init__(self, dist, ucb=None, distType=None, switch_start=False, verbose=True) -> None:
         super().__init__(dist, ucb, distType)
         self.groups = len(dist)
         self.num_ids = 0
@@ -595,6 +596,7 @@ class exposure(Ranker):
             self.formQueue(i)
         
         self.exp_thresh=1.0
+        self.verbose=verbose
 
     @staticmethod
     def name():
@@ -620,11 +622,11 @@ class exposure(Ranker):
         rel=np.array(list(self.probs_all.values()))[:,None]
         if merits is not None:
             merits = merits.T
-        EOR, total_cost, group_cost, DCG, EOR_abs = getExposureMetrics(rel, np.array(self.group_ids), self.n_group, merits)
+        EOR, total_cost, group_cost, DCG, EOR_abs = getExposureMetrics(rel, np.array(self.group_ids), self.n_group, merits, verbose=self.verbose)
         return EOR, total_cost, group_cost, DCG, EOR_abs
         
 class exposure_DP(Ranker):
-    def __init__(self, dist, ucb=None, distType=None, switch_start=False) -> None:
+    def __init__(self, dist, ucb=None, distType=None, switch_start=False, verbose=True) -> None:
         super().__init__(dist, ucb, distType)
         self.groups = len(dist)
         self.num_ids = 0
@@ -650,6 +652,7 @@ class exposure_DP(Ranker):
             self.formQueue(i)
         
         self.exp_thresh=1.0
+        self.verbose=verbose
 
     @staticmethod
     def name():
@@ -675,7 +678,7 @@ class exposure_DP(Ranker):
         rel=np.array(list(self.probs_all.values()))[:,None]
         if merits is not None:
             merits = merits.T
-        EOR, total_cost, group_cost, DCG, EOR_abs = getExposureMetrics(rel, np.array(self.group_ids), self.n_group, merits=merits, dp=True)
+        EOR, total_cost, group_cost, DCG, EOR_abs = getExposureMetrics(rel, np.array(self.group_ids), self.n_group, merits=merits, dp=True, verbose=self.verbose)
         return EOR, total_cost, group_cost, DCG, EOR_abs
 
 class fairSearch(Ranker):

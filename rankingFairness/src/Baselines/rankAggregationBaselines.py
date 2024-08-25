@@ -3,12 +3,7 @@ import random
 import math
 import pandas as pd
 import itertools
-# import gurobipy as gp
-# from gurobipy import GRB
-# import networkx as nx
-# from networkx.algorithms import bipartite
 from itertools import combinations, permutations
-import pdb
 from copy import deepcopy
 from tqdm import tqdm
 
@@ -243,7 +238,7 @@ def pre_proc_kem(base_ranks, item_ids, group_ids, bnd):
 
     return np.asarray(result), ranking_group_ids
 
-def epiRA(base_ranks, item_ids, group_ids, bnd, grporder, current_ranking=None, current_group_ids=None, agg_method=None):
+def epiRA(base_ranks, item_ids, group_ids, bnd, grporder, current_ranking=None, current_group_ids=None, agg_method=None, verbose=False):
     """
     Function to perform fair exposure rank aggregation via post-processing a voting rule.
     :param base_ranks: Assumes zero index. Numpy array of # voters x # items representing the base rankings.
@@ -359,7 +354,8 @@ def epiRA(base_ranks, item_ids, group_ids, bnd, grporder, current_ranking=None, 
             current_ranking[where_to_put_g] = g_ordered
         current_group_ids = [group_ids[np.argwhere(item_ids == i)[0][0]] for i in current_ranking]
         
-        print("exposure achieved with RA:", cur_exp)
+        if verbose:
+            print("exposure achieved with RA:", cur_exp)
         return current_ranking, np.asarray(current_group_ids), cur_exp
 
 

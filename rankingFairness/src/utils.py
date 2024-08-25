@@ -3,7 +3,6 @@ import random
 import heapq
 from sklearn.linear_model import LogisticRegression
 from sklearn.base import BaseEstimator
-from rankingFairness.src.distributions import Drichlet, Multinomial, Bernoulli, Beta
 import os.path as osp
 
 def set_seed(seed):

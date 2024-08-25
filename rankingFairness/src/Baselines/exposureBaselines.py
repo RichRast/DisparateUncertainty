@@ -1,135 +1,20 @@
 import cvxpy as cp
 import numpy as np 
-import pdb
 from copy import deepcopy
 import itertools
 import matplotlib.pyplot as plt
-from rankingFairness.src.Baselines.Birkhoff import birkhoff_von_neumann_decomposition
-# from birkhoff import birkhoff_von_neumann_decomposition
+
 
 """
 Reference: https://github.com/MilkaLichtblau/BA_Laura/tree/master/src/algorithms/FOEIR,
 https://github.com/dmh43/fair-ranking/blob/master/fairness_of_exposure.py"
 """
 
-def createRanking(x, nRanking, k):
-    
-    """
-    Calculates the birkhoff-von-Neumann decomopsition using package available at
-    https://github.com/jfinkels/birkhoff
-    
-    @param x: doubly stochastic matrix 
-    @param nRanking: nRanking: List with candidate objects from the data set ordered color-blindly
-    @param k: length of the ranking
-    
-    return the a list with candidate objects ordered according to the new ranking
-    """
-    
-    #compute birkoff von neumann decomposition
-    result = birkhoff_von_neumann_decomposition(x)
-    
-    theta = 0
-    final = 0
-    #choose permuation matrix with highest probability
-    for coefficient, permutation_matrix in result:
-        final += coefficient
-        #print(coefficient)
-        #print(permutation_matrix)
-        if theta < coefficient:
-            theta = coefficient
-            ranking = permutation_matrix
-    #get positions of each document        
-    positions = np.nonzero(ranking)[1]
-    
-    #convert numpy array to iterable list
-    positions = positions.tolist()
-    
-    #correct the index of the items in the ranking according to permutation matrix
-    for p, candidate in zip(positions,nRanking[:k]):
-        candidate.currentIndex = p+1
-    
-    top = nRanking[:k]
-    tail = nRanking[k:]
-    
-    #sort top 40 scores according to index
-    top.sort(key=lambda candidate: candidate.currentIndex, reverse=False)
-    #make sure rest of ranking is still ordered color-blindly for evaluation with rKL
-    tail.sort(key=lambda candidate: candidate.learnedScores, reverse=True)
-    
-    nRanking = top + tail
-    
-    for i, candidate in enumerate(nRanking):
-        candidate.currentIndex = i + 1
-        
-    #sort candidates according to new index
-    nRanking.sort(key=lambda candidate: candidate.currentIndex, reverse=False)
-    
-    for candidate in nRanking[:k]:
-        candidate.qualification = candidate.learnedScores
-        
-    return nRanking, True
-
-def sample_ranking(probabalistic_ranking):
-    decomposition = birkhoff_von_neumann_decomposition(probabalistic_ranking)
-    print(decomposition)
-    weights, matrices = zip(*decomposition)
-    print(weights)
-    print(matrices)
-    index = np.random.choice(len(decomposition), 1, p=weights)[0]
-    return matrices[index]
-
-def getExposureRanking(u: np.ndarray,
-        grp_arr: np.ndarray,
-        exp_thresh=0.9) -> np.ndarray:
-    """
-    @param u: (num_docs,) item relevances
-    @param grp_arr: (num_docs,) group membership
-    return ranking: (num_docs,) ranking that satisfies DTR exposure constaint threshold
-    """
-    # u = np.array((0.81, 0.80, 0.79, 0.78, 0.77, 0.0))
-    v = np.array([1.0/(np.log(2 + i)) for i, _ in enumerate(u)])
-    k=len(u)
-    P = cp.Variable((k, k))
-    objective = cp.Maximize(cp.matmul(cp.matmul(u, P), v))
-    groups = np.unique(grp_arr)
-    grp_counts = np.unique(grp_arr, return_counts=True)[1]
-    u_grp = np.full(len(groups), 0.0)
-    f_arr = np.full(k, np.inf)
-    for i,g in enumerate(grp_arr):
-        u_grp[g] += u[i] 
-    for i,g in enumerate(grp_arr):
-        if g==0:
-            f_arr[i] = 1/(u_grp[g]/grp_counts[g])
-        elif g==1:
-            f_arr[i] = -1/(u_grp[g]/grp_counts[g])
-    
-    # f = cp.matmul(cp.matmul(f_arr, P),v)
-    # f1 = cp.multiply(f_arr, cp.matmul(P,v)) #(nx1)
-    # f = cp.max(f1)/cp.min(f1)
-    # f= max(f1)-min(f1)
-    f = cp.matmul(cp.matmul(np.array([1/u[:3].sum(), 1/u[:3].sum(), 1/u[:3].sum(), -1/u[3:].sum(), -1/u[3:].sum(), -1/u[3:].sum()]) / 3, P), v)
-    # pdb.set_trace()
-    constraints = [cp.matmul(np.ones((1,k)), P) == np.ones((1,k)),
-                cp.matmul(P, np.ones((k,))) == np.ones((k,)),
-                0.0 <= P, P <= 1.0,
-                f==0]
-                # f <= exp_thresh,
-                # f >= -exp_thresh ]
-    prob = cp.Problem(objective, constraints)
-
-    result = prob.solve(verbose=True, solver=cp.SCS)
-    # The optimal Lagrange multiplier for a constraint is stored in
-    # `constraint.dual_value`.
-    print(constraints[0].dual_value)
-    # ranking, ret_val = createRanking(abs(P.value), np.arange(k), k)
-    # assert ret_val
-    print(P.value)
-    ranking = sample_ranking(P.value)
-    return ranking
 
 def getPiMatrix(rel: np.ndarray,
         grp_arr: np.ndarray,
-        grp_rel: dict
+        grp_rel: dict,
+        verbose=True
     ) -> (np.ndarray, float):
     """
     params rel: relevance array of n items (n, 1)
@@ -176,13 +61,15 @@ def getPiMatrix(rel: np.ndarray,
             exp_thresh -= decrement
         else:
             feasible_flag=True
-            print(f"found feasible solution at exp_thresh:{exp_thresh}")
+            if verbose:
+                print(f"found feasible solution at exp_thresh:{exp_thresh}")
 
     return P.value, prob.value
 
 def getPiMatrix_DP_exp(rel: np.ndarray,
         grp_arr: np.ndarray,
-        grp_rel: dict
+        grp_rel: dict,
+        verbose=True,
     ) -> (np.ndarray, float):
     """
     params rel: relevance array of n items (n, 1)
@@ -228,7 +115,8 @@ def getPiMatrix_DP_exp(rel: np.ndarray,
             exp_thresh -= decrement
         else:
             feasible_flag=True
-            print(f"found feasible solution at exp_thresh:{exp_thresh}")
+            if verbose:
+                print(f"found feasible solution at exp_thresh:{exp_thresh}")
 
     return P.value, prob.value
 
@@ -236,7 +124,8 @@ def getExposureMetrics(rel: np.ndarray,
         grp_arr: np.ndarray,
         grp_rel: dict,
         merits=None,
-        dp=False) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray):
+        dp=False,
+        verbose=True) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray):
     """
     params rel: relevance array of n items (n, 1)
     params grp_arr: group membership of n items (n,)
@@ -252,12 +141,13 @@ def getExposureMetrics(rel: np.ndarray,
     assert rel.shape[1]==1
     num_items = rel.shape[0]
     if dp:
-        P, obj = getPiMatrix_DP_exp(rel, grp_arr, grp_rel)
+        P, obj = getPiMatrix_DP_exp(rel, grp_arr, grp_rel, verbose=verbose)
     else:
-        P, obj = getPiMatrix(rel, grp_arr, grp_rel)
+        P, obj = getPiMatrix(rel, grp_arr, grp_rel, verbose=verbose)
     # P = np.clip(P, 0.0, 1.0)
-    plt.imshow(P)
-    print(f"objective:{obj}")
+    if verbose:
+        plt.imshow(P)
+        print(f"objective:{obj}")
     if merits is None:
         merits=rel
     else:

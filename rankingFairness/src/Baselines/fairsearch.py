@@ -1,7 +1,6 @@
 import fairsearchcore as fsc
 from fairsearchcore.models import FairScoreDoc
 import numpy as np
-import pdb
 
 def getFSMetrics(PRP_rel: np.ndarray,
         PRP_group_ids: np.ndarray,
@@ -25,7 +24,6 @@ def getFSMetrics(PRP_rel: np.ndarray,
     unfair_ranking=[]
     for i, p in enumerate(PRP_ranking):
         unfair_ranking.append(FairScoreDoc(p, PRP_rel[i], bool(PRP_group_ids[i])))
-    # pdb.set_trace()
     re_ranked = fair.re_rank(unfair_ranking)
     ranking = np.full((num_items,),0, dtype=int)
     for i,r in enumerate(re_ranked):

@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.stats import beta as beta_dist 
-import pdb
-from rankingFairness.src.tradeoff import UtilityCost
+from rankingFairness.src.tradeoffMultipleGroups import UtilityCost
 import math
 
 class Bernoulli():
