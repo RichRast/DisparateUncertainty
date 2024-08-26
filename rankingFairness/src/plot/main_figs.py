@@ -207,7 +207,6 @@ def plot_synthetic(EO_constraint, cost_groups, total_cost, rankingAlgos, ranking
         plt.savefig(osp.join(save_path, filename), bbox_inches='tight')
 
     plt.show() 
-    plt.close()
 
 
 

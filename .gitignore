@@ -4,6 +4,7 @@
 *tex_arxiv/*
 *tests
 */__pycache__/*
+*.pyc
 *.js*
 local/*
 wip/*
