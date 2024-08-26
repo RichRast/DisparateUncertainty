@@ -172,108 +172,7 @@ class TS_RankerII(Ranker):
         EOR = np.max(n_group_ranking, axis=0)-np.min(n_group_ranking, axis=0)
         return EOR.sum()
         
-
-class UCB_Ranker(Ranker):
-    pass
-
 class EO_Ranker(Ranker):
-    def __init__(self, dist, ucb=None, distType=None, switch_start=False) -> None:
-        super().__init__(dist, ucb, distType)
-        self.num_ids = len(dist[0]) + len(dist[1])
-        self.ids = np.array([i for i in range(self.num_ids)])
-        self.start_minority_idx = len(dist[0])
-        probs_all, n_group = self.getExpectedRel(dist)
-        self.n_group = n_group
-        self.probs_all = probs_all
-        # self.delta = max([self.probs_all[i]/self.n_group[j] for i,j in zip(self.ids, [0]*len(dist[0])+ [1]*len(dist[1]))])
-        majority_rel = np.array([d.getMean() for d in dist[0]])[:,None]
-        minority_rel = np.array([d.getMean() for d in dist[1]])[:,None]
-        self.delta = ((np.sort(majority_rel, axis=0)[-1]/self.n_group[0]) + (np.sort(minority_rel, axis=0)[-1]/self.n_group[1]))/2
-        self.queue=[]
-        for i in range(len(dist)):
-            self.queue.append(MaxPriorityQueue())
-            self.formQueue(i)
-        print(self.delta)
-        self.arm_a=0.0
-        self.arm_b=0.0
-
-    @staticmethod
-    def name():
-        return "EORI"
-    
-    def formQueue(self, g):
-        if self.ucb is not None:
-            pMeans=self.ucb[g]
-        else:
-            pMeans=np.array([p.getMean() for p in self.dist[g]])
-        for ids, val in zip(np.arange(len(pMeans)), pMeans):
-            self.queue[g].add(val, ids)
-
-    def getExpectedRel(self, dist):
-        probs_all, n_group = getProbsDict(self.num_ids, dist)
-        return probs_all, n_group
-
-    def rank(self, top_k=None) -> np.ndarray:
-        EOR_monitor =[]
-        self.ranking = []
-        j = 0
-        
-        while j < top_k:
-            EOR_compare=[]
-            a,b=None, None
-            assert len(self.queue[0]) + len(self.queue[1]) > 0 
-            if len(self.queue[0]) > 0 : 
-                a = self.queue[0].peek_max()[1]
-                EOR_compare.append(self.getEOR(self.ranking + [a]))
-            if len(self.queue[1]) > 0 : 
-                b = self.start_minority_idx + self.queue[1].peek_max()[1]
-                EOR_compare.append(self.getEOR(self.ranking + [b]))
-            
-            EO_satisfy_indices = np.argwhere(EOR_compare<=self.delta)[:,0]
-            assert len(EO_satisfy_indices)>0, f"EOR:{EOR_compare}"
-            if (len(EO_satisfy_indices)==2):
-                if (abs(EOR_compare[0]-EOR_compare[1])<=EPSILON):
-                    selected_idx = np.random.choice(np.arange(len(EO_satisfy_indices)), 1).item()
-                    print(selected_idx)
-                elif self.probs_all[a]>self.probs_all[b]:
-                    selected_idx=0
-                else:
-                    selected_idx=1
-                if selected_idx==0:
-                    selected_arm = a
-                    self.queue[0].pop_max()
-                    self.arm_a=self.probs_all[a]
-                else:
-                    selected_arm = b
-                    self.queue[1].pop_max()
-                    self.arm_b=self.probs_all[b]
-            elif (EO_satisfy_indices[0]==0) and (a is not None) and (len(EO_satisfy_indices)==1):
-                selected_arm = a
-                self.queue[0].pop_max()
-                self.arm_a=self.probs_all[a]
-            else:
-                selected_arm = b
-                self.queue[1].pop_max()
-                self.arm_b=self.probs_all[b]
-
-            self.ranking.append(selected_arm)
-            j+=1
-            EOR_monitor.append(self.getEOR(self.ranking))
-
-        return EOR_monitor
-
-    def getEOR(self, ranking):
-        # add unit test for EOR calculation
-        ids_majority_ranking = np.intersect1d(ranking, self.ids[:self.start_minority_idx])
-        ids_minority_ranking = np.intersect1d(ranking, self.ids[self.start_minority_idx:])
-        if len(ids_minority_ranking)>0: 
-            ids_minority_ranking -= self.start_minority_idx
-        n_majority_ranking = sum([d.getMean() for d in np.array(self.dist[0])[ids_majority_ranking]]) if len(ids_majority_ranking)>0 else 0
-        n_minority_ranking = sum([d.getMean() for d in np.array(self.dist[1])[ids_minority_ranking]]) if len(ids_minority_ranking)>0 else 0
-        EOR = (n_majority_ranking/self.n_group[0]) - (n_minority_ranking/self.n_group[1])
-        return np.abs(EOR)
-
-class EO_RankerII(Ranker):
     def __init__(self, dist, ucb=None, distType=None, switch_start=False) -> None:
         super().__init__(dist, ucb, distType)
         self.groups = len(dist)
@@ -496,37 +395,9 @@ class DP_RankerIII(Ranker):
             self.queue[selected_idx].pop_max()
             self.ranking.append(selected_arm)
 
-class parallelRanker():
-    def __init__(self, draws, ranker, distType, num_docs):
-        super().__init__()
-        """
-        Wrapper class to run many rankers in parallel
-        """
-        self.draws = draws 
-        self.ranker = ranker
-        self.dist = dist
-        self.rankers = np.full(num_rankers, 0)
-        self.num_docs = num_docs
-        self.distType = distType
-
-    def rank(self):
-    #     np.vectorize(self.rankingAlg)(self.rankers)
-
-        
-    #         ranker.rank(self.num_docs)
-    #         ranking_deterministic[a, i, top_k, :,:,d] = ranker.ranking
-        
-       
-    #     self.ranking[a]=ranking_deterministic[a,...]
-        pass
-    
-    def __call__(self):
-        for d in range(draws):
-            self.rankers[d] = self.ranker(self.dist[d], self.distType)
-        return np.array([a.rank(self.num_docs) for a in self.rankers])
 
 class epiRAnker(Ranker):
-    def __init__(self, dist, ucb=None, distType=None, switch_start=False, verbose=True) -> None:
+    def __init__(self, dist, ucb=None, distType=None, switch_start=False, verbose=False) -> None:
         super().__init__(dist, ucb, distType)
         self.groups = len(dist)
         self.num_ids = 0

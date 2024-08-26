@@ -5,7 +5,7 @@ from rankingFairness.src.distributions import Bernoulli
 from rankingFairness.src.tradeoffMultipleGroups import UtilityCost
 from rankingFairness.src.utils import getGroupNames
 from rankingFairness.src.decorators import timer
-from rankingFairness.src.rankingsMultipleGroups import Uniform_Ranker, TS_RankerII, EO_RankerII, DP_Ranker, parallelRanker, epiRAnker, exposure, exposure_DP, fairSearch
+from rankingFairness.src.rankingsMultipleGroups import Uniform_Ranker, TS_RankerII, EO_Ranker, DP_Ranker, epiRAnker, exposure, exposure_DP, fairSearch
 
 import random
 from copy import deepcopy
@@ -108,7 +108,7 @@ class simpleOfflineMultipleGroups(GeneralExperiment):
             else:
                 ranker.rank(self.num_docs)
                 self.ranking[a]=np.array(ranker.ranking)[None,:]
-                if isinstance(ranker, EO_RankerII):
+                if isinstance(ranker, EO_Ranker):
                     a_EOR=a
                 elif isinstance(ranker, epiRAnker):
                     self.RA_exp_achieved=ranker.exp_achieved
@@ -179,9 +179,10 @@ class simpleOfflineMultipleGroups(GeneralExperiment):
             
         handles, labels = plt.gca().get_legend_handles_labels()
 
-        
-        # fig.supxlabel("Length of Ranking (k)", fontsize=20)
-        # fig.supylabel(f"Costs ", fontsize=20)
+        ax[0].set_xlabel("Length of Ranking (k)", fontsize=20)
+        ax[0].set_ylabel(r'Group Costs', fontsize=20)
+        ax[1].set_xlabel("Length of Ranking (k)", fontsize=20)
+        ax[1].set_ylabel(r'Total Costs', fontsize=20)
         for axis in ax.ravel():
             axis.set_ylim(-self.offset, 1 + self.offset)
             axis.set_xlim(1-self.offset, self.num_docs+self.offset)
