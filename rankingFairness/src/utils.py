@@ -46,7 +46,7 @@ def getGroupNames(start_minority_idx, ranking):
     return groupNames
 
 def getProbsDict(num_docs, dist):
-    #ToDo generalize this to any number of groups
+    
     prob_by_groups ={}
     n_group={}
     ids = [i for i in range(num_docs)]

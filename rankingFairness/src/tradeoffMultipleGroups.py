@@ -153,20 +153,14 @@ class UtilityCost():
             else:
                 n_group_ranking[g,:] = (self.group_mask[:,g] @ self.probs_items)/self.n_group[g]
 
-        
-        # for Two Group EOR        
         if self.groups==2:
             EOR = n_group_ranking[0,:]-n_group_ranking[1,:]
-            # EOR_std = np.std(EOR)
-            # EOR_avg = np.mean(EOR)
         else:
             EOR = np.max(n_group_ranking, axis=0)-np.min(n_group_ranking, axis=0) 
-            # EOR_std = np.std(np.max(n_group_ranking, axis=0)-np.min(n_group_ranking, axis=0)) 
-            # EOR_avg = np.max(np.mean(n_group_ranking, axis=1))-np.min(np.mean(n_group_ranking, axis=1)) 
             
         EOR_avg = np.mean(EOR, axis=-1)
         EOR_abs_avg = np.mean(np.abs(EOR), axis=-1)
-        # return EOR_avg, self.delta_max, EOR_std
+
         return EOR_avg, self.delta_max, EOR_abs_avg
     
 
@@ -188,8 +182,6 @@ def getSummaryStat(EOR: np.ndarray,
     Eor_max = np.max(np.abs(EOR[0,:]))
     total_cost_summary = (total_cost[1,:]-total_cost[0,:]).sum()
     group_cost_summary = np.max(np.max(group_cost[0,...], axis=0) - np.min(group_cost[0,...], axis=0))
-
-    # assert math.isclose(Eor_max, group_cost_summary), f"Eor_max-group_cost_dev_max:{Eor_max-group_cost_summary}"
 
     return Eor_summary, Eor_max, total_cost_summary, group_cost_summary
 
